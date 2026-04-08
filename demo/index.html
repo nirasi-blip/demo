@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disability Analytics Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        secondary: {
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Sarabun', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- React & ReactDOM (removed crossorigin to fix local file access issues) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Chart.js provides a robust charting library over CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', 'Sarabun', sans-serif; background-color: #f8fafc; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 h-screen overflow-hidden flex">
+    <!-- root for React -->
+    <div id="root" class="w-full h-full flex flex-col md:flex-row"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // -- Heroicons --
+        const IconDashboard = () => <svg className="w-5 h-5 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>;
+        const IconUsers = () => <svg className="w-5 h-5 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
+        const IconUpload = () => <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
+        const IconBell = () => <svg className="w-6 h-6 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
+
+        const initialData = [
+            { type: 'ทางการเคลื่อนไหว', count: 450, color: '#0ea5e9' },
+            { type: 'ทางการได้ยิน', count: 320, color: '#8b5cf6' },
+            { type: 'ทางการมองเห็น', count: 210, color: '#10b981' },
+            { type: 'ทางสติปัญญา', count: 180, color: '#f59e0b' },
+            { type: 'ทางจิตใจ/พฤติกรรม', count: 150, color: '#ef4444' },
+            { type: 'ทางการเรียนรู้', count: 90, color: '#f43f5e' }
+        ];
+
+        const Dashboard = () => {
+            const [datasetName, setDatasetName] = useState('ข้อมูลปัจจุบัน (ปี 2567)');
+            const [compareDatasetName, setCompareDatasetName] = useState(null);
+            
+            const [mainData, setMainData] = useState(initialData.map(d => d.count));
+            const [compareData, setCompareData] = useState([]);
+            
+            const barChartRef = useRef(null);
+            const doughnutChartRef = useRef(null);
+            const barChartInstance = useRef(null);
+            const doughnutChartInstance = useRef(null);
+
+            const labels = initialData.map(d => d.type);
+            const colors = initialData.map(d => d.color);
+
+            useEffect(() => {
+                // Render Bar Chart
+                if (barChartRef.current) {
+                    if (barChartInstance.current) {
+                        barChartInstance.current.destroy();
+                    }
+                    const ctxBar = barChartRef.current.getContext('2d');
+                    
+                    const datasets = [{
+                        label: datasetName,
+                        data: mainData,
+                        backgroundColor: '#0ea5e9',
+                        borderRadius: 4
+                    }];
+
+                    if (compareDatasetName) {
+                        datasets.push({
+                            label: compareDatasetName,
+                            data: compareData,
+                            backgroundColor: '#10b981',
+                            borderRadius: 4
+                        });
+                    }
+
+                    barChartInstance.current = new Chart(ctxBar, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true, grid: { color: '#e2e8f0', drawBorder: false } },
+                                x: { grid: { display: false } }
+                            },
+                            plugins: {
+                                legend: { position: 'top' }
+                            }
+                        }
+                    });
+                }
+
+                // Render Doughnut Chart
+                if (doughnutChartRef.current) {
+                    if (doughnutChartInstance.current) {
+                        doughnutChartInstance.current.destroy();
+                    }
+                    const ctxDoughnut = doughnutChartRef.current.getContext('2d');
+                    doughnutChartInstance.current = new Chart(ctxDoughnut, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: mainData,
+                                backgroundColor: colors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '75%',
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        }
+                    });
+                }
+            }, [mainData, compareData, datasetName, compareDatasetName]);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    setCompareDatasetName(`อัปโหลด: ${file.name}`);
+                    const newComparisons = mainData.map(val => Math.floor(val * (Math.random() * 0.8 + 0.6)));
+                    setCompareData(newComparisons);
+                }
+            };
+
+            const resetComparison = () => {
+                setCompareDatasetName(null);
+                setCompareData([]);
+            };
+
+            const totalMain = mainData.reduce((acc, v) => acc + v, 0);
+            const totalCompare = compareData.reduce((acc, v) => acc + v, 0);
+            const trend = totalMain > 0 && compareData.length > 0 ? ((totalCompare - totalMain) / totalMain * 100).toFixed(1) : 0;
+
+            const StatCard = ({ title, value, subtitle, trendValue, colorClass }) => (
+                <div className={`p-6 rounded-2xl shadow-sm border border-white/40 ${colorClass} transition-transform transform hover:-translate-y-1 duration-300`}>
+                    <h3 className="text-sm font-medium text-slate-500 mb-1">{title}</h3>
+                    <div className="flex items-end justify-between">
+                        <span className="text-3xl font-bold text-slate-800">{value}</span>
+                        {trendValue !== undefined && trendValue !== 0 && (
+                            <span className={`text-sm font-medium flex items-center ${trendValue > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {trendValue > 0 ? '↑ +' : '↓ '}{trendValue}%
+                            </span>
+                        )}
+                    </div>
+                    {subtitle && <p className="text-xs text-slate-400 mt-2 truncate max-w-[200px]">{subtitle}</p>}
+                </div>
+            );
+
+            return (
+                <div className="flex-1 flex flex-col h-full bg-slate-50 relative overflow-y-auto w-full">
+                    <header className="sticky top-0 z-20 px-8 py-5 flex items-center justify-between glass-panel">
+                        <div>
+                            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-secondary-600">
+                                ศูนย์ข้อมูลคนพิการ
+                            </h1>
+                            <p className="text-sm text-slate-500">Dashboard สถิติและประเภทความพิการ</p>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                            <div className="relative">
+                                <input 
+                                    type="file" 
+                                    id="file-upload" 
+                                    className="hidden" 
+                                    accept=".csv, .xlsx" 
+                                    onChange={handleFileUpload} 
+                                />
+                                <label 
+                                    htmlFor="file-upload" 
+                                    className="cursor-pointer flex items-center px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm font-medium rounded-lg shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                                >
+                                    <IconUpload />
+                                    เพิ่มไฟล์เปรียบเทียบ
+                                </label>
+                            </div>
+                            <button className="text-slate-400 relative">
+                                <IconBell />
+                                <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white"></span>
+                            </button>
+                            <div className="w-10 h-10 rounded-full bg-slate-300 p-0.5">
+                                <img src="https://ui-avatars.com/api/?name=Admin+User&background=fff&color=0284c7" alt="Profile" className="w-full h-full rounded-full" />
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 p-8 w-full max-w-7xl mx-auto">
+                        {compareDatasetName && (
+                            <div className="mb-6 px-6 py-4 bg-emerald-50 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                    <div className="text-emerald-600"><IconDashboard /></div>
+                                    <div>
+                                        <h4 className="font-semibold text-slate-800">กำลังเปรียบเทียบข้อมูล</h4>
+                                        <p className="text-sm text-slate-500">{datasetName} <span className="font-bold">vs</span> <span className="text-emerald-600">{compareDatasetName}</span></p>
+                                    </div>
+                                </div>
+                                <button onClick={resetComparison} className="px-4 py-2 text-sm text-rose-500 font-medium">ยกเลิกเปรียบเทียบ</button>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <StatCard title="ผู้พิการร่วมทั้งหมด (หลัก)" value={totalMain.toLocaleString()} subtitle={datasetName} colorClass="bg-white" />
+                            {compareDatasetName && (
+                                <StatCard title="ผู้พิการร่วมทั้งหมด (เปรียบเทียบ)" value={totalCompare.toLocaleString()} subtitle={compareDatasetName} trendValue={trend} colorClass="bg-emerald-50/50" />
+                            )}
+                            <StatCard title="ประเภทที่พบบ่อยที่สุด" value="ทางการเคลื่อนไหว" subtitle={`${mainData[0].toLocaleString()} คน`} colorClass="bg-primary-50/50" />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[450px]">
+                                <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
+                                    <div className="w-1.5 h-6 bg-primary-500 rounded-full mr-3"></div>
+                                    เปรียบเทียบจำนวนตามประเภท
+                                </h3>
+                                <div className="flex-1 relative w-full h-full">
+                                    <canvas ref={barChartRef}></canvas>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[450px] relative">
+                                <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
+                                    <div className="w-1.5 h-6 bg-secondary-500 rounded-full mr-3"></div>
+                                    สัดส่วน (ข้อมูลหลัก)
+                                </h3>
+                                <div className="flex-1 relative w-full flex justify-center items-center">
+                                    <canvas ref={doughnutChartRef}></canvas>
+                                    <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+                                        <span className="text-3xl font-bold text-slate-800">{totalMain.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                                    {initialData.slice(0, 4).map((item, idx) => (
+                                        <div key={idx} className="flex items-center"><span className="w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: item.color }}></span>{item.type}</div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const RootApp = () => (
+            <div className="flex w-full h-screen">
+                <Dashboard />
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<RootApp />);
+    </script>
+</body>
+</html>
